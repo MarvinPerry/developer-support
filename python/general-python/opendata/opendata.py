@@ -1,4 +1,15 @@
+"""
+Warning: Open Data API is not documented and therefore the endpoints may change at any point : http://ideas.arcgis.com/ideaView?id=087E0000000blPIIAY
+Not supported by Esri Support Services.
+Requests module is needed, download it here if you don't have it installed: http://docs.python-requests.org/en/latest/
+"""
+print(__doc__)
+
 import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+import argparse
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 
 class OpenData(object):
@@ -47,19 +58,47 @@ class OpenData(object):
             except:
                 pass
 
-        return [x['id'] for x in dataset_list]
+        return [x for x in dataset_list]
 
     def refresh(self):
         """
-        Refreshes all Open Data datasets and download cache.
+        Refreshes all Open Data datasets and download caches that aren't back by hosted services.
         """
+        refreshed_list = []
+        unrefreshed_list = []
+        print("Gathering datasets...")
         for dataset in self.OpenDataItems:
-            print("Refreshed: {}".format(dataset))
-            url = "https://opendata.arcgis.com/api/datasets/{0}/refresh.json?token={1}".format(dataset, self.token)
-            requests.put(url, verify=False)
+            if dataset['attributes']['downloadCache'] != 'hosted':
+                url = "https://opendata.arcgis.com/utilities/workers/refresh/datasets/{0}.json?token={1}".format(dataset['id'], self.token)
+                requests.post(url, verify=False)
+                refreshed_list.append(dataset['attributes']['title'])
+
+            else:
+                unrefreshed_list.append(dataset['attributes']['title'])
+
+        # generates a report of the caches that have been refreshed by the script and those that haven't
+        count = 1
+        print("Refreshed: {} of {} caches\n".format(len(refreshed_list), len(self.OpenDataItems)))
+        for item in refreshed_list:
+            print("{}. Refreshed: {}".format(count, item))
+            count += 1
+        count = 1
+
+        if len(unrefreshed_list) > 0:
+            print("\nDid not manually refresh: {} of {} caches".format(len(unrefreshed_list), len(self.OpenDataItems)))
+            print("These datasets are backed by hosted services that have their caches automatically refreshed by ArcGIS Online.\n")
+            for item in unrefreshed_list:
+                print("{}. Not refreshed: {}".format(count, item))
+                count += 1
 
 
 if __name__ == "__main__":
-    """Example workflow that refreshes all datasets in an Open Data site."""
-    test = OpenData("username", "password", "0000")
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-u", "--username", help="your username")
+    parser.add_argument("-p", "--password", help="your password")
+    parser.add_argument("-i", "--id", type=str, help="your org id")
+    args = parser.parse_args()
+
+    test = OpenData(args.username, args.password, args.id)
     test.refresh()
